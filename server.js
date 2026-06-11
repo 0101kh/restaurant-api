@@ -2,7 +2,6 @@ const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
 const WebSocket = require('ws');
-const { v4: uuidv4 } = require('uuid');
 const http = require('http');
 
 const app = express();
@@ -17,9 +16,7 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// WebSocket клиенты
 const clients = new Set();
-
 wss.on('connection', (ws) => {
   clients.add(ws);
   ws.on('close', () => clients.delete(ws));
@@ -32,25 +29,19 @@ function broadcast(data) {
   });
 }
 
-// ─── МЕНЮ ───────────────────────────────────────────────
+// МЕНЮ
 app.get('/api/menu', async (req, res) => {
   try {
-    const { rows } = await pool.query(
-      'SELECT * FROM menu_items WHERE available = true ORDER BY category, sort_order, created_at'
-    );
+    const { rows } = await pool.query('SELECT * FROM menu_items WHERE available = true ORDER BY category, sort_order, created_at');
     res.json(rows);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/menu/all', async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT * FROM menu_items ORDER BY category, sort_order, created_at');
     res.json(rows);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/menu', async (req, res) => {
@@ -61,9 +52,7 @@ app.post('/api/menu', async (req, res) => {
       [name, description, price, category, cook_time || '15 мин', image_url || null]
     );
     res.json(rows[0]);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.put('/api/menu/:id', async (req, res) => {
@@ -74,21 +63,17 @@ app.put('/api/menu/:id', async (req, res) => {
       [name, description, price, category, cook_time, image_url, available, req.params.id]
     );
     res.json(rows[0]);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.delete('/api/menu/:id', async (req, res) => {
   try {
     await pool.query('DELETE FROM menu_items WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── СЕССИИ СТОЛОВ ──────────────────────────────────────
+// СЕССИИ
 app.get('/api/sessions/active/:table', async (req, res) => {
   try {
     const { rows } = await pool.query(
@@ -96,9 +81,7 @@ app.get('/api/sessions/active/:table', async (req, res) => {
       [req.params.table, 'open']
     );
     res.json(rows[0] || null);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/sessions', async (req, res) => {
@@ -109,9 +92,7 @@ app.post('/api/sessions', async (req, res) => {
       [table_number, 'open']
     );
     res.json(rows[0]);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.put('/api/sessions/:id/close', async (req, res) => {
@@ -119,16 +100,13 @@ app.put('/api/sessions/:id/close', async (req, res) => {
     await pool.query('UPDATE table_sessions SET status=$1 WHERE id=$2', ['closed', req.params.id]);
     broadcast({ type: 'session_closed', session_id: req.params.id });
     res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/sessions/open', async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT ts.*, 
-        json_agg(o.*) FILTER (WHERE o.id IS NOT NULL) as orders
+      SELECT ts.*, json_agg(o.*) FILTER (WHERE o.id IS NOT NULL) as orders
       FROM table_sessions ts
       LEFT JOIN orders o ON o.session_id = ts.id
       WHERE ts.status = 'open'
@@ -136,12 +114,10 @@ app.get('/api/sessions/open', async (req, res) => {
       ORDER BY ts.created_at DESC
     `);
     res.json(rows);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── ЗАКАЗЫ ─────────────────────────────────────────────
+// ЗАКАЗЫ
 app.post('/api/orders', async (req, res) => {
   const { table_number, guest_name, guest_name_display, items, session_id } = req.body;
   try {
@@ -152,9 +128,7 @@ app.post('/api/orders', async (req, res) => {
     );
     broadcast({ type: 'new_order', order: rows[0] });
     res.json(rows[0]);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/orders/active', async (req, res) => {
@@ -163,9 +137,7 @@ app.get('/api/orders/active', async (req, res) => {
       "SELECT * FROM orders WHERE status IN ('new','cooking','ready') ORDER BY created_at ASC"
     );
     res.json(rows);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/orders/history', async (req, res) => {
@@ -174,61 +146,50 @@ app.get('/api/orders/history', async (req, res) => {
       "SELECT * FROM orders WHERE status='done' ORDER BY created_at DESC"
     );
     res.json(rows);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/orders/:id', async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT * FROM orders WHERE id=$1', [req.params.id]);
     res.json(rows[0] || null);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/orders/session/:sessionId', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT * FROM orders WHERE session_id=$1 AND status != 'deleted' ORDER BY created_at ASC",
+      "SELECT * FROM orders WHERE session_id=$1 ORDER BY created_at ASC",
       [req.params.sessionId]
     );
     res.json(rows);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.put('/api/orders/:id', async (req, res) => {
-  const fields = [];
+  const updates = [];
   const values = [];
   let i = 1;
-  const allowed = ['status', 'items', 'has_additions'];
-  for (const key of allowed) {
-    if (req.body[key] !== undefined) {
-      fields.push(`${key}=$${i++}`);
-      values.push(key === 'items' ? JSON.stringify(req.body[key]) : req.body[key]);
-    }
-  }
-  if (!fields.length) return res.status(400).json({ error: 'No fields' });
+  if (req.body.status !== undefined) { updates.push('status=$' + i++); values.push(req.body.status); }
+  if (req.body.items !== undefined) { updates.push('items=$' + i++); values.push(JSON.stringify(req.body.items)); }
+  if (req.body.has_additions !== undefined) { updates.push('has_additions=$' + i++); values.push(req.body.has_additions); }
+  if (!updates.length) return res.status(400).json({ error: 'No fields' });
+  updates.push('updated_at=now()');
   values.push(req.params.id);
   try {
     const { rows } = await pool.query(
-      `UPDATE orders SET ${fields.join(','')}, updated_at=now() WHERE id=$${i} RETURNING *`,
+      'UPDATE orders SET ' + updates.join(',') + ' WHERE id=$' + i + ' RETURNING *',
       values
     );
     broadcast({ type: 'order_updated', order: rows[0] });
     res.json(rows[0]);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── ЗАГРУЗКА ФОТО ──────────────────────────────────────
+// ЗАГРУЗКА ФОТО
 app.post('/api/upload', async (req, res) => {
   try {
-    const { data, filename, mimetype } = req.body;
+    const { data, mimetype } = req.body;
     if (!data) return res.status(400).json({ error: 'No data' });
     const base64 = data.replace(/^data:image\/\w+;base64,/, '');
     const buffer = Buffer.from(base64, 'base64');
@@ -236,20 +197,15 @@ app.post('/api/upload', async (req, res) => {
     const path = require('path');
     const uploadsDir = path.join(__dirname, 'uploads');
     if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
-    const ext = mimetype.split('/')[1] || 'jpg';
-    const fname = `${Date.now()}.${ext}`;
+    const ext = (mimetype || 'image/jpeg').split('/')[1] || 'jpg';
+    const fname = Date.now() + '.' + ext;
     fs.writeFileSync(path.join(uploadsDir, fname), buffer);
-    const url = `${process.env.API_URL || ''}/uploads/${fname}`;
-    res.json({ url });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+    res.json({ url: (process.env.API_URL || '') + '/uploads/' + fname });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.use('/uploads', express.static('uploads'));
-
-// ─── HEALTH CHECK ────────────────────────────────────────
 app.get('/', (req, res) => res.json({ status: 'ok', time: new Date() }));
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => console.log('Server running on port ' + PORT));
