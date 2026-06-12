@@ -186,6 +186,43 @@ app.put('/api/orders/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ОПЛАТА
+app.post('/api/payment/request', async (req, res) => {
+  const { session_id, guest_name, table_number, total, method } = req.body;
+  try {
+    await pool.query(
+      'UPDATE table_sessions SET payment_status=$1 WHERE id=$2',
+      ['requested', session_id]
+    );
+    const broadcastData = {
+      type: 'payment_requested',
+      session_id, guest_name, table_number, total, method,
+      time: new Date().toISOString()
+    };
+    // Broadcast to kitchen
+    const msg = JSON.stringify(broadcastData);
+    clients.forEach(ws => { if(ws.readyState === 1) ws.send(msg); });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/payment/confirm', async (req, res) => {
+  const { session_id } = req.body;
+  try {
+    await pool.query(
+      'UPDATE table_sessions SET payment_status=$1 WHERE id=$2',
+      ['paid', session_id]
+    );
+    await pool.query(
+      'UPDATE orders SET is_paid=true WHERE session_id=$2',
+      [session_id]
+    );
+    const msg = JSON.stringify({ type: 'payment_confirmed', session_id });
+    clients.forEach(ws => { if(ws.readyState === 1) ws.send(msg); });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ЗАГРУЗКА ФОТО
 app.post('/api/upload', async (req, res) => {
   try {
