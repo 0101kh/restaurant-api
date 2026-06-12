@@ -135,10 +135,11 @@ app.get('/api/sessions/open', async (req, res) => {
 app.post('/api/orders', async (req, res) => {
   const { table_number, guest_name, guest_name_display, items, session_id } = req.body;
   try {
+    const waiter_name = req.body.waiter_name || null;
     const { rows } = await pool.query(
-      `INSERT INTO orders (table_number, guest_name, guest_name_display, items, status, session_id)
-       VALUES ($1,$2,$3,$4,'new',$5) RETURNING *`,
-      [table_number, guest_name, guest_name_display || guest_name, JSON.stringify(items), session_id]
+      `INSERT INTO orders (table_number, guest_name, guest_name_display, items, status, session_id, waiter_name)
+       VALUES ($1,$2,$3,$4,'new',$5,$6) RETURNING *`,
+      [table_number, guest_name, guest_name_display || guest_name, JSON.stringify(items), session_id, waiter_name]
     );
     await notifyWaiter(table_number, { type: 'new_order', order: rows[0] });
     res.json(rows[0]);
