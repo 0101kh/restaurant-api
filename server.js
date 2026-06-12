@@ -173,6 +173,7 @@ app.put('/api/orders/:id', async (req, res) => {
   if (req.body.status !== undefined) { updates.push('status=$' + i++); values.push(req.body.status); }
   if (req.body.items !== undefined) { updates.push('items=$' + i++); values.push(JSON.stringify(req.body.items)); }
   if (req.body.has_additions !== undefined) { updates.push('has_additions=$' + i++); values.push(req.body.has_additions); }
+  if (req.body.is_takeaway !== undefined) { updates.push('is_takeaway=$' + i++); values.push(req.body.is_takeaway); }
   if (!updates.length) return res.status(400).json({ error: 'No fields' });
   updates.push('updated_at=now()');
   values.push(req.params.id);
