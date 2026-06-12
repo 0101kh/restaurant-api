@@ -186,6 +186,27 @@ app.put('/api/orders/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// НАСТРОЙКИ
+app.get('/api/settings', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT key, value FROM settings');
+    const settings = {};
+    rows.forEach(r => settings[r.key] = r.value);
+    res.json(settings);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/settings', async (req, res) => {
+  const { key, value } = req.body;
+  try {
+    await pool.query(
+      'INSERT INTO settings (key, value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=$2',
+      [key, value]
+    );
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ОПЛАТА
 app.post('/api/payment/request', async (req, res) => {
   const { session_id, guest_name, table_number, total, method } = req.body;
