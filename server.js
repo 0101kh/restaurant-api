@@ -29,6 +29,20 @@ function broadcast(data) {
   });
 }
 
+async function notifyWaiter(tableNumber, data) {
+  // Найти официанта для этого стола
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM waiters WHERE $1 = ANY(tables) AND active=true',
+      [tableNumber]
+    );
+    // Broadcast всем — клиенты сами фильтруют по своим столам
+    broadcast({ ...data, waiter_tables: rows.length ? rows[0].tables : null });
+  } catch(e) {
+    broadcast(data);
+  }
+}
+
 // МЕНЮ
 app.get('/api/menu', async (req, res) => {
   try {
@@ -126,7 +140,7 @@ app.post('/api/orders', async (req, res) => {
        VALUES ($1,$2,$3,$4,'new',$5) RETURNING *`,
       [table_number, guest_name, guest_name_display || guest_name, JSON.stringify(items), session_id]
     );
-    broadcast({ type: 'new_order', order: rows[0] });
+    await notifyWaiter(table_number, { type: 'new_order', order: rows[0] });
     res.json(rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -184,6 +198,55 @@ app.put('/api/orders/:id', async (req, res) => {
     broadcast({ type: 'order_updated', order: rows[0] });
     res.json(rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ОФИЦИАНТЫ
+app.get('/api/waiters', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM waiters WHERE active=true ORDER BY name');
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/waiters', async (req, res) => {
+  const { name, login, password, tables } = req.body;
+  try {
+    const { rows } = await pool.query(
+      'INSERT INTO waiters (name, login, password, tables) VALUES ($1,$2,$3,$4) RETURNING *',
+      [name, login, password, tables||[]]
+    );
+    res.json(rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/waiters/:id', async (req, res) => {
+  const { name, login, password, tables, active } = req.body;
+  try {
+    const { rows } = await pool.query(
+      'UPDATE waiters SET name=$1,login=$2,password=$3,tables=$4,active=$5 WHERE id=$6 RETURNING *',
+      [name, login, password, tables||[], active, req.params.id]
+    );
+    res.json(rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/waiters/:id', async (req, res) => {
+  try {
+    await pool.query('UPDATE waiters SET active=false WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/waiters/login', async (req, res) => {
+  const { login, password } = req.body;
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM waiters WHERE login=$1 AND password=$2 AND active=true',
+      [login, password]
+    );
+    if(rows.length) res.json(rows[0]);
+    else res.status(401).json({ error: 'Неверный логин или пароль' });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // НАСТРОЙКИ
