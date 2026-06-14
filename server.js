@@ -19,6 +19,10 @@ const pool = new Pool({
 // миграция: колонка для чека оплаты (идемпотентно, один раз при старте)
 pool.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_receipt TEXT')
   .catch(e => console.error('migration error:', e.message));
+pool.query('ALTER TABLE waiters ADD COLUMN IF NOT EXISTS service_percent NUMERIC DEFAULT 0')
+  .catch(e => console.error('migration error:', e.message));
+pool.query('ALTER TABLE waiters ADD COLUMN IF NOT EXISTS waiter_percent NUMERIC DEFAULT 0')
+  .catch(e => console.error('migration error:', e.message));
 
 const clients = new Set();
 wss.on('connection', (ws) => {
@@ -215,22 +219,22 @@ app.get('/api/waiters', async (req, res) => {
 });
 
 app.post('/api/waiters', async (req, res) => {
-  const { name, login, password, tables } = req.body;
+  const { name, login, password, tables, service_percent, waiter_percent } = req.body;
   try {
     const { rows } = await pool.query(
-      'INSERT INTO waiters (name, login, password, tables) VALUES ($1,$2,$3,$4) RETURNING *',
-      [name, login, password, tables||[]]
+      'INSERT INTO waiters (name, login, password, tables, service_percent, waiter_percent) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [name, login, password, tables||[], service_percent||0, waiter_percent||0]
     );
     res.json(rows[0]);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 app.put('/api/waiters/:id', async (req, res) => {
-  const { name, login, password, tables, active } = req.body;
+  const { name, login, password, tables, active, service_percent, waiter_percent } = req.body;
   try {
     const { rows } = await pool.query(
-      'UPDATE waiters SET name=$1,login=$2,password=$3,tables=$4,active=$5 WHERE id=$6 RETURNING *',
-      [name, login, password, tables||[], active, req.params.id]
+      'UPDATE waiters SET name=$1,login=$2,password=$3,tables=$4,active=$5,service_percent=$6,waiter_percent=$7 WHERE id=$8 RETURNING *',
+      [name, login, password, tables||[], active, service_percent||0, waiter_percent||0, req.params.id]
     );
     res.json(rows[0]);
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -328,6 +332,17 @@ app.post('/api/upload', async (req, res) => {
     const fname = Date.now() + '.' + ext;
     fs.writeFileSync(path.join(uploadsDir, fname), buffer);
     res.json({ url: (process.env.API_URL || '') + '/uploads/' + fname });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// СЕРВИСНЫЙ СБОР ПО СТОЛУ (процент активного официанта)
+app.get('/api/service/:table', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT service_percent FROM waiters WHERE $1 = ANY(tables) AND active=true ORDER BY id LIMIT 1',
+      [req.params.table]
+    );
+    res.json({ service_percent: rows[0] ? Number(rows[0].service_percent || 0) : 0 });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
