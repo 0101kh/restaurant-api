@@ -273,7 +273,7 @@ app.post('/api/settings', async (req, res) => {
 
 // ОПЛАТА
 app.post('/api/payment/request', async (req, res) => {
-  const { session_id, guest_name, table_number, total, method } = req.body;
+  const { session_id, guest_name, table_number, total, method, receipt_url } = req.body;
   try {
     await pool.query(
       'UPDATE table_sessions SET payment_status=$1 WHERE id=$2',
@@ -281,7 +281,7 @@ app.post('/api/payment/request', async (req, res) => {
     );
     const broadcastData = {
       type: 'payment_requested',
-      session_id, guest_name, table_number, total, method,
+      session_id, guest_name, table_number, total, method, receipt_url,
       time: new Date().toISOString()
     };
     // Broadcast to kitchen
