@@ -16,6 +16,10 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
+// миграция: колонка для чека оплаты (идемпотентно, один раз при старте)
+pool.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_receipt TEXT')
+  .catch(e => console.error('migration error:', e.message));
+
 const clients = new Set();
 wss.on('connection', (ws) => {
   clients.add(ws);
@@ -188,6 +192,7 @@ app.put('/api/orders/:id', async (req, res) => {
   if (req.body.status !== undefined) { updates.push('status=$' + i++); values.push(req.body.status); }
   if (req.body.items !== undefined) { updates.push('items=$' + i++); values.push(JSON.stringify(req.body.items)); }
   if (req.body.has_additions !== undefined) { updates.push('has_additions=$' + i++); values.push(req.body.has_additions); }
+  if (req.body.payment_receipt !== undefined) { updates.push('payment_receipt=$' + i++); values.push(req.body.payment_receipt); }
   if (!updates.length) return res.status(400).json({ error: 'No fields' });
   updates.push('updated_at=now()');
   values.push(req.params.id);
@@ -323,6 +328,20 @@ app.post('/api/upload', async (req, res) => {
     const fname = Date.now() + '.' + ext;
     fs.writeFileSync(path.join(uploadsDir, fname), buffer);
     res.json({ url: (process.env.API_URL || '') + '/uploads/' + fname });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ЧЕК ОПЛАТЫ ИЗ БАЗЫ (отдаём картинку)
+app.get('/api/receipt/:id', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT payment_receipt FROM orders WHERE id=$1', [req.params.id]);
+    const dataUrl = rows[0] && rows[0].payment_receipt;
+    if (!dataUrl) return res.status(404).send('No receipt');
+    const m = /^data:(image\/[\w.+-]+);base64,(.+)$/s.exec(dataUrl);
+    if (!m) return res.status(415).send('Bad format');
+    res.set('Content-Type', m[1]);
+    res.set('Cache-Control', 'private, max-age=86400');
+    res.send(Buffer.from(m[2], 'base64'));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
