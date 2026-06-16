@@ -29,6 +29,9 @@ pool.query('ALTER TABLE table_sessions ADD COLUMN IF NOT EXISTS payment_method T
 pool.query('ALTER TABLE table_sessions ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ')
   .catch(e => console.error('migration error:', e.message));
 
+pool.query("ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS station TEXT DEFAULT 'Остальное'")
+  .catch(e => console.error('migration error:', e.message));
+
 const clients = new Set();
 wss.on('connection', (ws) => {
   clients.add(ws);
@@ -72,22 +75,22 @@ app.get('/api/menu/all', async (req, res) => {
 });
 
 app.post('/api/menu', async (req, res) => {
-  const { name, description, price, category, cook_time, image_url } = req.body;
+  const { name, description, price, category, cook_time, image_url, station } = req.body;
   try {
     const { rows } = await pool.query(
-      'INSERT INTO menu_items (name, description, price, category, cook_time, image_url) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
-      [name, description, price, category, cook_time || '15 мин', image_url || null]
+      'INSERT INTO menu_items (name, description, price, category, cook_time, image_url, station) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
+      [name, description, price, category, cook_time || '15 мин', image_url || null, station || 'Остальное']
     );
     res.json(rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.put('/api/menu/:id', async (req, res) => {
-  const { name, description, price, category, cook_time, image_url, available } = req.body;
+  const { name, description, price, category, cook_time, image_url, available, station } = req.body;
   try {
     const { rows } = await pool.query(
-      'UPDATE menu_items SET name=$1, description=$2, price=$3, category=$4, cook_time=$5, image_url=$6, available=$7 WHERE id=$8 RETURNING *',
-      [name, description, price, category, cook_time, image_url, available, req.params.id]
+      'UPDATE menu_items SET name=$1, description=$2, price=$3, category=$4, cook_time=$5, image_url=$6, available=$7, station=$9 WHERE id=$8 RETURNING *',
+      [name, description, price, category, cook_time, image_url, available, req.params.id, station || 'Остальное']
     );
     res.json(rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
